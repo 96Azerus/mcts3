@@ -1,0 +1,67 @@
+// .devcontainer/devcontainer.json
+{
+	"name": "OFC Pineapple Poker AI (Python 3.11)",
+
+	// Используем существующий Dockerfile для сборки контейнера
+	"build": {
+		"dockerfile": "../Dockerfile", // Путь к Dockerfile относительно директории .devcontainer
+		"context": ".." // Контекст сборки - корневая директория проекта
+	},
+
+	// Переменные окружения для контейнера (можно добавить еще)
+	"containerEnv": {
+		"PYTHONPATH": "/app", // Указываем Python, где искать модули (включая src)
+		"FLASK_ENV": "development", // Устанавливаем режим разработки по умолчанию
+		"FLASK_DEBUG": "1"
+		// "MCTS_TIME_LIMIT_MS": "3000" // Пример переопределения параметра MCTS
+	},
+
+	// Настройки VS Code внутри контейнера
+	"customizations": {
+		"vscode": {
+			// Устанавливаемые расширения VS Code
+			"extensions": [
+				"ms-python.python", // Основное расширение Python
+				"ms-python.vscode-pylance", // Анализ языка (IntelliSense)
+				"ms-python.debugpy", // Отладчик Python
+				"njpwerner.autodocstring", // Генерация докстрингов
+				"ms-azuretools.vscode-docker", // Интеграция с Docker
+				"bierner.github-markdown-preview", // Улучшенный предпросмотр Markdown
+				"redhat.vscode-yaml", // Поддержка YAML (для Docker Compose и т.д.)
+				"charliermarsh.ruff" // Линтер Ruff
+			],
+			// Настройки редактора
+			"settings": {
+				"python.defaultInterpreterPath": "/usr/local/bin/python", // Путь к Python внутри контейнера
+				"python.linting.enabled": true,
+				"python.linting.pylintEnabled": false, // Отключаем Pylint в пользу Ruff/Flake8
+				"python.linting.flake8Enabled": true,
+				"python.formatting.provider": "black", // Используем Black для форматирования
+				"editor.formatOnSave": true, // Форматировать при сохранении
+				"python.testing.pytestArgs": [ // Аргументы для Pytest
+					"tests", // Указываем директорию с тестами
+					"-v"     // Включаем подробный вывод
+				],
+				"python.testing.unittestEnabled": false, // Отключаем стандартный unittest
+				"python.testing.pytestEnabled": true, // Включаем Pytest
+				"files.eol": "\n", // Использовать LF в качестве символа конца строки
+				"terminal.integrated.defaultProfile.linux": "bash", // Терминал по умолчанию
+				"terminal.integrated.profiles.linux": {
+					"bash": {
+						"path": "/bin/bash"
+					}
+				}
+			}
+		}
+	},
+
+	// Порты для проброса из контейнера на хост
+	"forwardPorts": [8080], // Пробрасываем порт, на котором работает Flask/Gunicorn
+
+	// Команда, выполняемая после создания контейнера
+	// "postCreateCommand": "pip install --upgrade pip && pip install -r requirements.txt", // Зависимости уже установлены в Dockerfile
+
+	// Пользователь, от имени которого будут запускаться процессы в контейнере
+	// Должен совпадать с USER в Dockerfile
+	"remoteUser": "appuser"
+}
