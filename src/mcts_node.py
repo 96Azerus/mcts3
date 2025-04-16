@@ -1,4 +1,4 @@
-# src/mcts_node.py v1.1
+# src/mcts_node.py v1.2
 """
 Представление узла дерева MCTS для OFC Pineapple.
 Содержит состояние игры, статистику посещений/наград и логику MCTS (выбор, расширение, симуляция).
@@ -149,11 +149,10 @@ class MCTSNode:
             # Для улицы 1 пока используем случайный выбор
             return random.choice(actions)
         else:
-            # --- ИСПРАВЛЕНИЕ ОТСТУПОВ ---
             hand = state.current_hands.get(player_idx)
             # Проверяем руку и возвращаем случайное действие, если что-то не так
             if not hand or len(hand) != 3:
-                return random.choice(actions) # Отступ для return исправлен
+                return random.choice(actions)
 
             # Эвристика для улиц 2-5
             best_action = None
@@ -188,7 +187,6 @@ class MCTSNode:
 
             # Возвращаем лучшее найденное или случайное, если эвристика не сработала
             return best_action if best_action else random.choice(actions)
-            # --- КОНЕЦ ИСПРАВЛЕНИЯ ОТСТУПОВ ---
 
     def _heuristic_fantasyland_placement(self, hand: List[int]) -> Tuple[Optional[Dict[str, List[int]]], Optional[List[int]]]:
         """Простая эвристика для размещения Фантазии в роллаутах."""
@@ -232,34 +230,136 @@ class MCTSNode:
             default_discard = hand[13:] if len(hand) > 13 else []
             return None, default_discard
 
-    # (Методы get_q_value, get_rave_q_value, uct_select_child, __repr__ без изменений)
     def get_q_value(self, perspective_player: int) -> float:
-        if self.visits == 0: return 0.0; raw_q = self.total_reward / self.visits; player_who_acted = self.parent._get_player_to_move() if self.parent else -1;
-        if player_who_acted == perspective_player: return raw_q; elif player_who_acted != -1: return -raw_q; else: return raw_q if perspective_player == 0 else -raw_q
+        """Возвращает Q-значение узла с точки зрения указанного игрока."""
+        if self.visits == 0:
+            return 0.0
+        raw_q = self.total_reward / self.visits
+        # Определяем, чей ход привел к этому состоянию (кто ходил в родительском узле)
+        player_who_acted = self.parent._get_player_to_move() if self.parent else -1
+
+        # --- ИСПРАВЛЕНИЕ СИНТАКСИСА ---
+        if player_who_acted == perspective_player:
+            # Если ход делал игрок, с чьей точки зрения мы смотрим, Q-значение прямое
+            return raw_q
+        elif player_who_acted != -1:
+            # Если ход делал другой игрок, инвертируем Q-значение
+            return -raw_q
+        else:
+            # Если player_who_acted == -1 (например, корневой узел или терминальный),
+            # возвращаем значение с точки зрения P0 по умолчанию
+            return raw_q if perspective_player == 0 else -raw_q
+        # --- КОНЕЦ ИСПРАВЛЕНИЯ СИНТАКСИСА ---
+
     def get_rave_q_value(self, action: Any, perspective_player: int) -> float:
-        rave_visits = self.rave_visits.get(action, 0);
-        if rave_visits == 0: return 0.0; rave_reward = self.rave_total_reward.get(action, 0.0); raw_rave_q = rave_reward / rave_visits; player_to_move = self._get_player_to_move();
-        if player_to_move == -1: return 0.0; return raw_rave_q if player_to_move == perspective_player else -raw_rave_q
+        """Возвращает RAVE Q-значение для действия с точки зрения указанного игрока."""
+        rave_visits = self.rave_visits.get(action, 0)
+        if rave_visits == 0:
+            return 0.0
+        rave_reward = self.rave_total_reward.get(action, 0.0)
+        raw_rave_q = rave_reward / rave_visits
+        # Определяем, чей ход был бы после выполнения этого действия
+        # (т.е. чей ход в дочернем узле, если бы он был создан)
+        # Это немного сложнее, так как дочерний узел может не существовать.
+        # Проще использовать точку зрения игрока, который выбирает действие (т.е. чей ход в ТЕКУЩЕМ узле)
+        player_to_move_in_current_node = self._get_player_to_move()
+
+        if player_to_move_in_current_node == -1:
+            # Если в текущем узле никто не ходит (терминальный), RAVE не имеет смысла
+            return 0.0
+        # Возвращаем RAVE Q с точки зрения игрока, который выбирает действие
+        return raw_rave_q if player_to_move_in_current_node == perspective_player else -raw_rave_q
+
     def uct_select_child(self, exploration_constant: float, rave_k: float) -> Optional['MCTSNode']:
-        best_score = -float('inf'); best_child = None; current_player_perspective = self._get_player_to_move();
-        if current_player_perspective == -1: return None
-        parent_visits_log = math.log(self.visits + 1e-6); children_items = list(self.children.items());
-        if not children_items: return None
+        """Выбирает дочерний узел с использованием формулы UCT (с RAVE)."""
+        best_score = -float('inf')
+        best_child = None
+        current_player_perspective = self._get_player_to_move()
+
+        if current_player_perspective == -1:
+            return None # Не можем выбирать, если никто не ходит
+
+        # Логарифм посещений родителя (добавляем epsilon для избежания log(0))
+        parent_visits_log = math.log(self.visits + 1e-6)
+        children_items = list(self.children.items())
+        if not children_items:
+             return None # Нет дочерних узлов для выбора
+
+        # Перемешиваем для случайного выбора при равных очках
+        random.shuffle(children_items)
+
         for action, child in children_items:
-            child_visits = child.visits; rave_visits = 0; score = -float('inf')
-            try: hash(action); rave_visits = self.rave_visits.get(action, 0); except TypeError: pass
+            child_visits = child.visits
+            rave_visits = 0
+            score = -float('inf') # Начальное значение
+
+            # Проверяем хешируемость действия для RAVE
+            is_hashable = True
+            try:
+                hash(action)
+            except TypeError:
+                is_hashable = False
+
+            if is_hashable:
+                rave_visits = self.rave_visits.get(action, 0)
+
             if child_visits == 0:
-                if rave_visits > 0 and rave_k > 0: rave_q = self.get_rave_q_value(action, current_player_perspective); explore_rave = exploration_constant * math.sqrt(parent_visits_log / (rave_visits + 1e-6)); score = rave_q + explore_rave
-                else: score = float('inf')
+                # Если узел не посещался, используем RAVE (если есть) или даем высокий приоритет
+                if rave_visits > 0 and rave_k > 0 and is_hashable:
+                    rave_q = self.get_rave_q_value(action, current_player_perspective)
+                    # Используем только RAVE Q и exploration для неисследованных узлов
+                    explore_rave = exploration_constant * math.sqrt(parent_visits_log / (rave_visits + 1e-6))
+                    score = rave_q + explore_rave
+                else:
+                    # Даем максимальный приоритет неисследованным узлам без RAVE
+                    score = float('inf')
             else:
-                q_child = child.get_q_value(current_player_perspective); exploit_term = q_child; explore_term = exploration_constant * math.sqrt(parent_visits_log / child_visits); ucb1_score = exploit_term + explore_term
-                if rave_visits > 0 and rave_k > 0: rave_q = self.get_rave_q_value(action, current_player_perspective); beta = math.sqrt(rave_k / (3 * self.visits + rave_k)) if self.visits > 0 else 1.0; score = (1.0 - beta) * ucb1_score + beta * rave_q
-                else: score = ucb1_score
-            if score > best_score: best_score = score; best_child = child
+                # Стандартный UCB1
+                q_child = child.get_q_value(current_player_perspective)
+                exploit_term = q_child
+                explore_term = exploration_constant * math.sqrt(parent_visits_log / child_visits)
+                ucb1_score = exploit_term + explore_term
+
+                # Комбинируем с RAVE, если он доступен
+                if rave_visits > 0 and rave_k > 0 and is_hashable:
+                    rave_q = self.get_rave_q_value(action, current_player_perspective)
+                    # Формула AMAF/RAVE UCT
+                    beta = math.sqrt(rave_k / (3 * self.visits + rave_k)) if self.visits > 0 else 1.0
+                    score = (1.0 - beta) * ucb1_score + beta * rave_q
+                else:
+                    # Используем только UCB1, если RAVE недоступен
+                    score = ucb1_score
+
+            # Обновляем лучший узел
+            if score > best_score:
+                best_score = score
+                best_child = child
+            # Случайный выбор при равенстве (кроме inf)
             elif score == best_score and score != float('inf') and score != -float('inf'):
-                 if random.choice([True, False]): best_child = child
-        if best_child is None and children_items: best_child = random.choice([child for _, child in children_items])
+                 if random.choice([True, False]):
+                      best_child = child
+
+        # Если по какой-то причине лучший узел не выбран (например, все inf), выбираем случайно
+        if best_child is None and children_items:
+             best_child = random.choice([child for _, child in children_items])
+
         return best_child
-    def __repr__(self): player_idx = self._get_player_to_move(); player = f'P{player_idx}' if player_idx != -1 else 'T'; q_val_p0 = self.get_q_value(0); action_repr = "Root";
-        if self.action: try: action_str = str(self.action); action_repr = (action_str[:25] + '...') if len(action_str) > 28 else action_str; except: action_repr = "???"
-        return (f"[{player} Act:{action_repr} V={self.visits} Q0={q_val_p0:.2f} " f"N_Child={len(self.children)} U_Act={len(self.untried_actions or [])}]")
+
+    def __repr__(self):
+        """Строковое представление узла для отладки."""
+        player_idx = self._get_player_to_move()
+        player = f'P{player_idx}' if player_idx != -1 else 'T' # T for Terminal
+        q_val_p0 = self.get_q_value(0) # Q-value с точки зрения P0
+        action_repr = "Root"
+        if self.action:
+            try:
+                # Пытаемся получить короткое строковое представление действия
+                action_str = str(self.action)
+                action_repr = (action_str[:25] + '...') if len(action_str) > 28 else action_str
+            except Exception:
+                action_repr = "???" # Если не удалось преобразовать действие в строку
+
+        return (
+            f"[{player} Act:{action_repr} V={self.visits} Q0={q_val_p0:.2f} "
+            f"N_Child={len(self.children)} U_Act={len(self.untried_actions or [])}]"
+        )
