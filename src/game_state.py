@@ -9,6 +9,7 @@ import random
 import sys
 import traceback
 import logging # Добавлено для логирования
+import os
 from itertools import combinations, permutations
 from typing import List, Tuple, Optional, Set, Dict, Any
 
