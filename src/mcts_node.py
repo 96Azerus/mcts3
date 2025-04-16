@@ -1,4 +1,4 @@
-# src/mcts_node.py
+# src/mcts_node.py v1.1
 """
 Представление узла дерева MCTS для OFC Pineapple.
 Содержит состояние игры, статистику посещений/наград и логику MCTS (выбор, расширение, симуляция).
@@ -94,7 +94,7 @@ class MCTSNode:
                     if hand:
                         possible_moves = current_rollout_state.get_legal_actions_for_player(player_to_act_rollout)
                         if possible_moves:
-                            action = self._random_rollout_policy(possible_moves)
+                            action = self._heuristic_rollout_policy(current_rollout_state, player_to_act_rollout, possible_moves) # Используем эвристику
                             if action:
                                 simulation_actions_set.add(action)
                                 try: # --- ИЗМЕНЕНИЕ: Добавляем try-except вокруг apply ---
@@ -138,30 +138,99 @@ class MCTSNode:
         reward = float(final_score_p0) if perspective_player == 0 else float(-final_score_p0)
         return reward, simulation_actions_set
 
-    # (Методы _random_rollout_policy, _heuristic_rollout_policy, _heuristic_fantasyland_placement без изменений)
     def _random_rollout_policy(self, actions: List[Any]) -> Optional[Any]:
+        """Простая случайная политика для роллаутов."""
         return random.choice(actions) if actions else None
+
     def _heuristic_rollout_policy(self, state: GameState, player_idx: int, actions: List[Any]) -> Optional[Any]:
-        if not actions: return None;
-        if state.street == 1: return random.choice(actions)
-        else: hand = state.current_hands.get(player_idx);
-            if not hand or len(hand) != 3: return random.choice(actions)
-            best_action = None; best_score = -float('inf'); actions_sample = random.sample(actions, min(len(actions), 20))
-            for action in actions_sample: p1, p2, d_int = action; score = 0;
-                try: score -= CardUtils.get_rank_int(d_int) * 0.1; except Exception: pass
-                def bonus(c, r): try: rk = CardUtils.get_rank_int(c); return rk if r == 'bottom' else -rk if r == 'top' else 0; except: return 0
-                score += bonus(p1[0], p1[1]); score += bonus(p2[0], p2[1]); score += random.uniform(-0.1, 0.1)
-                if score > best_score: best_score = score; best_action = action
+        """Эвристическая политика для роллаутов (улицы 2-5)."""
+        if not actions: return None
+        if state.street == 1:
+            # Для улицы 1 пока используем случайный выбор
+            return random.choice(actions)
+        else:
+            # --- ИСПРАВЛЕНИЕ ОТСТУПОВ ---
+            hand = state.current_hands.get(player_idx)
+            # Проверяем руку и возвращаем случайное действие, если что-то не так
+            if not hand or len(hand) != 3:
+                return random.choice(actions) # Отступ для return исправлен
+
+            # Эвристика для улиц 2-5
+            best_action = None
+            best_score = -float('inf')
+            # Ограничиваем количество проверяемых действий для скорости
+            actions_sample = random.sample(actions, min(len(actions), 20))
+
+            for action in actions_sample:
+                # Действие: ((c1, r1, i1), (c2, r2, i2), discard)
+                p1, p2, d_int = action
+                score = 0
+                # Штраф за сброс старшей карты
+                try:
+                    score -= CardUtils.get_rank_int(d_int) * 0.1
+                except Exception: pass # Игнорируем ошибки, если карта невалидна
+                # Бонус за размещение старших карт вниз, младших - вверх
+                def bonus(card_int, row_name):
+                    try:
+                        rank_val = CardUtils.get_rank_int(card_int)
+                        if row_name == 'bottom': return rank_val
+                        elif row_name == 'top': return -rank_val
+                        else: return 0 # middle
+                    except Exception: return 0
+                score += bonus(p1[0], p1[1])
+                score += bonus(p2[0], p2[1])
+                # Добавляем немного случайности для разнообразия
+                score += random.uniform(-0.1, 0.1)
+
+                if score > best_score:
+                    best_score = score
+                    best_action = action
+
+            # Возвращаем лучшее найденное или случайное, если эвристика не сработала
             return best_action if best_action else random.choice(actions)
+            # --- КОНЕЦ ИСПРАВЛЕНИЯ ОТСТУПОВ ---
+
     def _heuristic_fantasyland_placement(self, hand: List[int]) -> Tuple[Optional[Dict[str, List[int]]], Optional[List[int]]]:
-        try: n_cards = len(hand); n_place = 13;
-            if not (14 <= n_cards <= 17): return None, None
-            n_discard = n_cards - n_place; sorted_hand = sorted(hand, key=lambda c: CardUtils.get_rank_int(c)); discarded = sorted_hand[:n_discard]; remaining = sorted_hand[n_discard:]
-            if len(remaining) != 13: return None, discarded
-            sorted_rem = sorted(remaining, key=lambda c: CardUtils.get_rank_int(c), reverse=True); placement = {'bottom': sorted_rem[0:5], 'middle': sorted_rem[5:10], 'top': sorted_rem[10:13]}
-            if check_board_foul(placement['top'], placement['middle'], placement['bottom']): return None, discarded
-            else: return placement, discarded
-        except Exception as e: print(f"Error in heuristic FL placement: {e}", file=sys.stderr); default_discard = hand[13:] if len(hand) > 13 else []; return None, default_discard
+        """Простая эвристика для размещения Фантазии в роллаутах."""
+        try:
+            n_cards = len(hand)
+            n_place = 13
+            if not (14 <= n_cards <= 17): return None, None # Неверный размер руки
+
+            n_discard = n_cards - n_place
+            # Сбрасываем самые младшие карты
+            sorted_hand = sorted(hand, key=lambda c: CardUtils.get_rank_int(c))
+            discarded = sorted_hand[:n_discard]
+            remaining = sorted_hand[n_discard:]
+
+            if len(remaining) != 13: return None, discarded # Ошибка
+
+            # Простое безопасное размещение оставшихся 13 карт
+            sorted_rem = sorted(remaining, key=lambda c: CardUtils.get_rank_int(c), reverse=True)
+            placement = {
+                'bottom': sorted_rem[0:5],
+                'middle': sorted_rem[5:10],
+                'top': sorted_rem[10:13]
+            }
+            # Проверяем на фол
+            if check_board_foul(placement['top'], placement['middle'], placement['bottom']):
+                 # Если фол, пытаемся поменять middle и bottom
+                 placement_swapped = {
+                      'bottom': placement['middle'],
+                      'middle': placement['bottom'],
+                      'top': placement['top']
+                 }
+                 if check_board_foul(placement_swapped['top'], placement_swapped['middle'], placement_swapped['bottom']):
+                      return None, discarded # Фол даже после обмена
+                 else:
+                      return placement_swapped, discarded
+            else:
+                return placement, discarded
+        except Exception as e:
+            print(f"Error in heuristic FL placement during rollout: {e}", file=sys.stderr)
+            # Возвращаем фол (None для placement) со стандартным сбросом
+            default_discard = hand[13:] if len(hand) > 13 else []
+            return None, default_discard
 
     # (Методы get_q_value, get_rave_q_value, uct_select_child, __repr__ без изменений)
     def get_q_value(self, perspective_player: int) -> float:
