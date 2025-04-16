@@ -1,4 +1,4 @@
-# src/mcts_node.py v1.2
+# src/mcts_node.py v1.3
 """
 Представление узла дерева MCTS для OFC Pineapple.
 Содержит состояние игры, статистику посещений/наград и логику MCTS (выбор, расширение, симуляция).
@@ -143,50 +143,45 @@ class MCTSNode:
         return random.choice(actions) if actions else None
 
     def _heuristic_rollout_policy(self, state: GameState, player_idx: int, actions: List[Any]) -> Optional[Any]:
-        """Эвристическая политика для роллаутов (улицы 2-5)."""
+        """Политика для роллаутов."""
         if not actions: return None
-        if state.street == 1:
-            # Для улицы 1 пока используем случайный выбор
-            return random.choice(actions)
-        else:
-            hand = state.current_hands.get(player_idx)
-            # Проверяем руку и возвращаем случайное действие, если что-то не так
-            if not hand or len(hand) != 3:
-                return random.choice(actions)
 
-            # Эвристика для улиц 2-5
-            best_action = None
-            best_score = -float('inf')
-            # Ограничиваем количество проверяемых действий для скорости
-            actions_sample = random.sample(actions, min(len(actions), 20))
+        # --- ИЗМЕНЕНИЕ: Используем случайную политику для всех улиц ---
+        # В будущем здесь можно реализовать более сложную эвристику,
+        # но для отладки MCTS и получения ненулевых Q-значений
+        # случайная политика часто является хорошей отправной точкой.
+        return self._random_rollout_policy(actions)
+        # --- КОНЕЦ ИЗМЕНЕНИЯ ---
 
-            for action in actions_sample:
-                # Действие: ((c1, r1, i1), (c2, r2, i2), discard)
-                p1, p2, d_int = action
-                score = 0
-                # Штраф за сброс старшей карты
-                try:
-                    score -= CardUtils.get_rank_int(d_int) * 0.1
-                except Exception: pass # Игнорируем ошибки, если карта невалидна
-                # Бонус за размещение старших карт вниз, младших - вверх
-                def bonus(card_int, row_name):
-                    try:
-                        rank_val = CardUtils.get_rank_int(card_int)
-                        if row_name == 'bottom': return rank_val
-                        elif row_name == 'top': return -rank_val
-                        else: return 0 # middle
-                    except Exception: return 0
-                score += bonus(p1[0], p1[1])
-                score += bonus(p2[0], p2[1])
-                # Добавляем немного случайности для разнообразия
-                score += random.uniform(-0.1, 0.1)
-
-                if score > best_score:
-                    best_score = score
-                    best_action = action
-
-            # Возвращаем лучшее найденное или случайное, если эвристика не сработала
-            return best_action if best_action else random.choice(actions)
+        # Старая эвристика (закомментирована):
+        # if state.street == 1:
+        #     return random.choice(actions)
+        # else:
+        #     hand = state.current_hands.get(player_idx)
+        #     if not hand or len(hand) != 3:
+        #         return random.choice(actions)
+        #     best_action = None
+        #     best_score = -float('inf')
+        #     actions_sample = random.sample(actions, min(len(actions), 20))
+        #     for action in actions_sample:
+        #         p1, p2, d_int = action
+        #         score = 0
+        #         try: score -= CardUtils.get_rank_int(d_int) * 0.1
+        #         except Exception: pass
+        #         def bonus(card_int, row_name):
+        #             try:
+        #                 rank_val = CardUtils.get_rank_int(card_int)
+        #                 if row_name == 'bottom': return rank_val
+        #                 elif row_name == 'top': return -rank_val
+        #                 else: return 0
+        #             except Exception: return 0
+        #         score += bonus(p1[0], p1[1])
+        #         score += bonus(p2[0], p2[1])
+        #         score += random.uniform(-0.1, 0.1)
+        #         if score > best_score:
+        #             best_score = score
+        #             best_action = action
+        #     return best_action if best_action else random.choice(actions)
 
     def _heuristic_fantasyland_placement(self, hand: List[int]) -> Tuple[Optional[Dict[str, List[int]]], Optional[List[int]]]:
         """Простая эвристика для размещения Фантазии в роллаутах."""
