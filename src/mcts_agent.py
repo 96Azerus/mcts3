@@ -147,7 +147,7 @@ class MCTSAgent:
                         async_results = [pool.apply_async(run_parallel_rollout, (node_state_dict,)) for _ in range(self.rollouts_per_leaf)]
                         for res in async_results:
                             try:
-                                timeout_get = max(0.1, self.time_limit * 0.1)
+                                timeout_get = max(3.0, self.time_limit * 0.2)
                                 reward, sim_actions = res.get(timeout=timeout_get)
                                 results.append(reward); simulation_actions_aggregated.update(sim_actions); num_simulations += 1
                             except multiprocessing.TimeoutError: print("Warning: Rollout worker timed out.", file=sys.stderr); sys.stderr.flush()
