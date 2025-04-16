@@ -629,7 +629,8 @@
         const isFL = currentGameState.isFantasylandRound && currentGameState.playerFantasylandStatus;
 
         try {
-            if (isFL) {
+            // ... (код подготовки movePayload без изменений) ...
+             if (isFL) {
                 // --- ИЗМЕНЕНИЕ: Валидация для Progressive FL ---
                 const placement = { top: Array(3).fill(CARD_PLACEHOLDER), middle: Array(5).fill(CARD_PLACEHOLDER), bottom: Array(5).fill(CARD_PLACEHOLDER) };
                 let actualPlacedCount = 0;
@@ -682,8 +683,19 @@
             updateUI(data); // Обновляем UI по ответу сервера
 
         } catch (error) {
-            console.error('JS Error sending move:', error); messageArea.textContent = `Ошибка хода: ${error.message}`; messageArea.style.color = 'red';
+            console.error('JS Error sending move:', error);
+            messageArea.textContent = `Ошибка хода: ${error.message}`;
+            messageArea.style.color = 'red';
+            // --- ИСПРАВЛЕНИЕ: Очищаем состояние UI при ошибке ---
+            placedCardsMap.clear();
+            if (selectedCardToDiscardElement) { selectedCardToDiscardElement.classList.remove('selected'); selectedCardToDiscardElement = null; }
+            flDiscardSelection.clear();
+            // --- КОНЕЦ ИСПРАВЛЕНИЯ ---
             // Не разблокируем кнопку "Готов" при ошибке, чтобы избежать повторной отправки невалидного хода
+            // Но кнопку "Начать раунд" можно разблокировать, если игра закончилась из-за ошибки
+            if (currentGameState && currentGameState.isGameOver) {
+                 startButton.disabled = false;
+            }
             waitingOverlay.style.display = 'none'; // Скрываем оверлей ожидания
         }
     }
