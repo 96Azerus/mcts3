@@ -69,29 +69,24 @@ class GameState:
 
 
     # --- Публичные методы для получения информации ---
-
+    # (Методы get_player_board, get_player_hand, is_round_over, get_terminal_score, get_known_dead_cards, get_player_to_move без изменений)
     def get_player_board(self, player_idx: int) -> PlayerBoard:
-        """Возвращает доску указанного игрока."""
         return self.boards[player_idx]
 
     def get_player_hand(self, player_idx: int) -> Optional[List[int]]:
-        """Возвращает текущую руку игрока (обычную или ФЛ)."""
         if self.is_fantasyland_round and self.fantasyland_status[player_idx]:
             return self.fantasyland_hands[player_idx]
         else:
             return self.current_hands.get(player_idx)
 
     def is_round_over(self) -> bool:
-        """Проверяет, завершили ли все игроки раунд."""
         return all(self._player_finished_round)
 
     def get_terminal_score(self) -> int:
-        """Возвращает счет раунда (P0 vs P1), если он завершен."""
         if not self.is_round_over(): return 0
         return calculate_headsup_score(self.boards[0], self.boards[1])
 
     def get_known_dead_cards(self, perspective_player_idx: int) -> Set[int]:
-        """Возвращает набор карт, известных игроку как вышедшие из игры."""
         dead_cards: Set[int] = set()
         for board in self.boards:
             for row_name in board.ROW_NAMES:
@@ -103,35 +98,21 @@ class GameState:
         return dead_cards
 
     def get_player_to_move(self) -> int:
-        """
-        Определяет индекс игрока, который должен ходить следующим.
-        Возвращает -1, если раунд завершен или никто не может ходить (ожидание).
-        """
         if self.is_round_over(): return -1
-
         if self.is_fantasyland_round:
-            # В ФЛ раунде ходят все, у кого есть карты и кто не закончил
             for i in range(self.NUM_PLAYERS):
-                 if not self._player_finished_round[i] and self.get_player_hand(i):
-                      return i # Возвращаем первого найденного
-            return -1 # Никто не может ходить
-        else: # Обычный раунд
+                 if not self._player_finished_round[i] and self.get_player_hand(i): return i
+            return -1
+        else:
             p_idx = self._internal_current_player_idx
-            # Проверяем, может ли текущий игрок ходить
-            if not self._player_finished_round[p_idx] and self.get_player_hand(p_idx):
-                return p_idx
-            # Если текущий не может, проверяем другого
+            if not self._player_finished_round[p_idx] and self.get_player_hand(p_idx): return p_idx
             other_p_idx = (p_idx + 1) % self.NUM_PLAYERS
-            if not self._player_finished_round[other_p_idx] and self.get_player_hand(other_p_idx):
-                # Другой игрок может ходить, но очередь не его -> Ожидание
-                return -1
-            # Если никто не может ходить (оба ждут карт или закончили)
+            if not self._player_finished_round[other_p_idx] and self.get_player_hand(other_p_idx): return -1
             return -1
 
     # --- Методы для изменения состояния ---
-
+    # (Метод start_new_round без изменений)
     def start_new_round(self, dealer_button_idx: int):
-        """Начинает новый раунд."""
         fl_status_for_new_round = list(self.next_fantasyland_status)
         fl_cards_for_new_round = list(self.fantasyland_cards_to_deal)
         self.__init__(dealer_idx=dealer_button_idx,
@@ -140,18 +121,15 @@ class GameState:
         self.street = 1
         self._internal_current_player_idx = (self.dealer_idx + 1) % self.NUM_PLAYERS
         self._last_player_acted = None
-        # Раздаем начальные карты
         if self.is_fantasyland_round:
             self._deal_fantasyland_hands()
             for i in range(self.NUM_PLAYERS):
                 if not self.fantasyland_status[i]: self._deal_street_to_player(i)
         else: self._deal_street_to_player(self._internal_current_player_idx)
-        # Сразу раздаем карты второму игроку, если нужно (после начальной раздачи)
         self._deal_cards_if_needed()
 
-
+    # (Методы apply_action, apply_fantasyland_placement, apply_fantasyland_foul без изменений)
     def apply_action(self, player_idx: int, action: Any) -> 'GameState':
-        """Применяет легальное действие ОБЫЧНОГО ХОДА."""
         new_state = self.copy(); board = new_state.boards[player_idx]
         if new_state.is_fantasyland_round and new_state.fantasyland_status[player_idx]: raise RuntimeError("Use apply_fantasyland_placement/foul for FL.")
         current_hand = new_state.current_hands.get(player_idx);
@@ -180,10 +158,9 @@ class GameState:
             return new_state
         except (ValueError, TypeError, RuntimeError, IndexError) as e:
             print(f"Error applying action P{player_idx} St{new_state.street}: {e}", file=sys.stderr); print(f"Action: {action}", file=sys.stderr)
-            return self # Возвращаем исходный объект при ошибке
+            return self
 
     def apply_fantasyland_placement(self, player_idx: int, placement: Dict[str, List[int]], discarded: List[int]) -> 'GameState':
-        """Применяет результат размещения Fantasyland."""
         new_state = self.copy(); board = new_state.boards[player_idx]
         if not new_state.is_fantasyland_round or not new_state.fantasyland_status[player_idx]: raise RuntimeError("Not in FL.")
         original_hand = new_state.fantasyland_hands[player_idx];
@@ -205,7 +182,6 @@ class GameState:
             return new_state.apply_fantasyland_foul(player_idx, original_hand)
 
     def apply_fantasyland_foul(self, player_idx: int, hand_to_discard: List[int]) -> 'GameState':
-        """Применяет фол в Fantasyland."""
         new_state = self.copy(); board = new_state.boards[player_idx]
         board.is_foul = True; board._cards_placed = 0; board._is_complete = False
         board.rows = {n: [None] * cap for n, cap in PlayerBoard.ROW_CAPACITY.items()}; board._reset_caches(); board._cached_royalties = {'top': 0, 'middle': 0, 'bottom': 0}
@@ -213,132 +189,101 @@ class GameState:
         new_state._player_finished_round[player_idx] = True; new_state.next_fantasyland_status[player_idx] = False; new_state.fantasyland_cards_to_deal[player_idx] = 0; new_state._last_player_acted = player_idx
         return new_state
 
+    # (Метод advance_state без изменений)
     def advance_state(self) -> 'GameState':
-         """ Продвигает состояние игры после хода: передает ход, меняет улицу, раздает карты. """
          if self.is_round_over(): return self
          new_state = self.copy()
-         initial_state_repr = self.get_state_representation() # Для проверки изменений
-
-         # --- Логика перехода хода и улицы (только для обычного раунда) ---
+         initial_state_repr = self.get_state_representation()
          if not new_state.is_fantasyland_round:
-              last_acted = new_state._last_player_acted
-              current_p = new_state._internal_current_player_idx
+              last_acted = new_state._last_player_acted; current_p = new_state._internal_current_player_idx
               player_finished_after_action = new_state._player_finished_round[last_acted] if last_acted is not None else False
-
-              # Проверяем, нужно ли менять улицу (если оба сходили ИЛИ один сходил и закончил, а другой уже закончил)
               other_p = (last_acted + 1) % new_state.NUM_PLAYERS if last_acted is not None else -1
-              both_acted_or_finished = all(new_state._player_acted_this_street) or \
-                                       (last_acted is not None and player_finished_after_action and new_state._player_finished_round[other_p])
-
+              both_acted_or_finished = all(new_state._player_acted_this_street) or (last_acted is not None and player_finished_after_action and new_state._player_finished_round[other_p])
               if both_acted_or_finished and new_state.street < 5:
-                   new_state.street += 1
-                   # print(f"--- Advancing to Street {new_state.street} ---") # Заменено логгером
-                   new_state._player_acted_this_street = [False] * new_state.NUM_PLAYERS
-                   new_state._internal_current_player_idx = (new_state.dealer_idx + 1) % new_state.NUM_PLAYERS
-                   new_state._last_player_acted = None # Сбрасываем после смены улицы
-              # Проверяем, нужно ли передать ход (если улицу не меняли и ходил текущий игрок)
+                   new_state.street += 1; new_state._player_acted_this_street = [False] * new_state.NUM_PLAYERS
+                   new_state._internal_current_player_idx = (new_state.dealer_idx + 1) % new_state.NUM_PLAYERS; new_state._last_player_acted = None
               elif last_acted is not None and last_acted == current_p:
                    next_p = (current_p + 1) % new_state.NUM_PLAYERS
-                   if not new_state._player_finished_round[next_p]:
-                        new_state._internal_current_player_idx = next_p
-
-         # --- Логика раздачи карт ---
+                   if not new_state._player_finished_round[next_p]: new_state._internal_current_player_idx = next_p
          new_state._deal_cards_if_needed()
-
-         # Возвращаем новое состояние, даже если оно не изменилось (например, оба ждут карт)
-         # if new_state.get_state_representation() == initial_state_repr and not new_state.is_round_over():
-         #      print("Debug: advance_state did not change state.", file=sys.stderr)
          return new_state
 
     # --- Внутренние методы ---
-
+    # (Методы _deal_cards_if_needed, _deal_street_to_player, _deal_fantasyland_hands, _check_foul_and_update_fl_status без изменений)
     def _deal_cards_if_needed(self):
-         """Раздает карты игрокам, если их очередь и у них нет карт."""
          players_to_deal = []
          if self.is_fantasyland_round:
               for p_idx in range(self.NUM_PLAYERS):
-                   if not self.fantasyland_status[p_idx] and not self._player_finished_round[p_idx] and self.current_hands.get(p_idx) is None:
-                        players_to_deal.append(p_idx)
-         else: # Обычный раунд
+                   if not self.fantasyland_status[p_idx] and not self._player_finished_round[p_idx] and self.current_hands.get(p_idx) is None: players_to_deal.append(p_idx)
+         else:
               p_idx = self._internal_current_player_idx
-              if not self._player_finished_round[p_idx] and self.current_hands.get(p_idx) is None:
-                   players_to_deal.append(p_idx)
-              # Если только что сменили улицу (last_acted is None), раздаем и второму
+              if not self._player_finished_round[p_idx] and self.current_hands.get(p_idx) is None: players_to_deal.append(p_idx)
               elif self._last_player_acted is None and self.street > 1:
                    other_p = (p_idx + 1) % self.NUM_PLAYERS
-                   if not self._player_finished_round[other_p] and self.current_hands.get(other_p) is None:
-                        players_to_deal.append(other_p)
-         # Раздаем карты
+                   if not self._player_finished_round[other_p] and self.current_hands.get(other_p) is None: players_to_deal.append(other_p)
          for p_idx_deal in players_to_deal: self._deal_street_to_player(p_idx_deal)
 
     def _deal_street_to_player(self, player_idx: int):
-        """Раздает карты для текущей улицы (1 или 2-5)."""
         if self._player_finished_round[player_idx] or self.current_hands.get(player_idx) is not None: return
         num_cards = 5 if self.street == 1 else 3;
         if self.street > 5: return
-        try:
-            dealt = self.deck.deal(num_cards)
-            if len(dealt) < num_cards: print(f"Warning: Not enough cards St{self.street} P{player_idx}.", file=sys.stderr)
-            self.current_hands[player_idx] = dealt
+        try: dealt = self.deck.deal(num_cards); self.current_hands[player_idx] = dealt
         except Exception as e: print(f"Error dealing St{self.street} P{player_idx}: {e}", file=sys.stderr); self.current_hands[player_idx] = []
 
     def _deal_fantasyland_hands(self):
-        """Раздает N карт (14-17) игрокам в ФЛ."""
         for i in range(self.NUM_PLAYERS):
             if self.fantasyland_status[i]:
                 num_cards = self.fantasyland_cards_to_deal[i];
                 if not (14 <= num_cards <= 17): num_cards = 14
-                try:
-                    dealt = self.deck.deal(num_cards)
-                    if len(dealt) < num_cards: print(f"Warning: Not enough cards FL P{i} (need {num_cards}).", file=sys.stderr)
-                    self.fantasyland_hands[i] = dealt
+                try: dealt = self.deck.deal(num_cards); self.fantasyland_hands[i] = dealt
                 except Exception as e: print(f"Error dealing FL P{i}: {e}", file=sys.stderr); self.fantasyland_hands[i] = []
 
     def _check_foul_and_update_fl_status(self, player_idx: int):
-        """Проверяет фол и обновляет статус ФЛ для следующего раунда."""
         board = self.boards[player_idx];
         if not board.is_complete(): return
         is_foul = board.check_and_set_foul(); self.next_fantasyland_status[player_idx] = False; self.fantasyland_cards_to_deal[player_idx] = 0
         if not is_foul:
-            if self.fantasyland_status[player_idx]: # Re-FL check
+            if self.fantasyland_status[player_idx]:
                 if board.check_fantasyland_stay_conditions(): self.next_fantasyland_status[player_idx] = True; self.fantasyland_cards_to_deal[player_idx] = 14
-            else: # Entry check
+            else:
                 fl_cards = board.get_fantasyland_qualification_cards()
                 if fl_cards > 0: self.next_fantasyland_status[player_idx] = True; self.fantasyland_cards_to_deal[player_idx] = fl_cards
 
     # --- Методы для MCTS и Сериализации ---
+
     def get_legal_actions_for_player(self, player_idx: int) -> List[Any]:
-        """Возвращает список легальных действий."""
-        # (Логика без изменений)
+        """Возвращает список легальных действий для указанного игрока."""
         if self._player_finished_round[player_idx]: return []
-        if self.is_fantasyland_round and self.fantasyland_status[player_idx]: hand = self.fantasyland_hands[player_idx]; return [("FANTASYLAND_INPUT", hand)] if hand else []
-        hand = self.current_hands.get(player_idx);
+
+        # --- ИСПРАВЛЕНО: Возвращаем tuple для руки ФЛ ---
+        if self.is_fantasyland_round and self.fantasyland_status[player_idx]:
+            hand = self.fantasyland_hands[player_idx]
+            # Возвращаем кортеж карт, чтобы действие было хешируемым
+            return [("FANTASYLAND_INPUT", tuple(hand))] if hand else []
+
+        hand = self.current_hands.get(player_idx)
         if not hand: return []
         if self.street == 1: return self._get_legal_actions_street1(player_idx, hand) if len(hand) == 5 else []
         elif 2 <= self.street <= 5: return self._get_legal_actions_pineapple(player_idx, hand) if len(hand) == 3 else []
         else: return []
 
-    def _get_legal_actions_street1(self, player_idx: int, hand: List[int]) -> List[Tuple[List[Tuple[int, str, int]], List[int]]]:
-        """Генерирует действия для улицы 1."""
-        # (Логика без изменений, с ограничением)
+    def _get_legal_actions_street1(self, player_idx: int, hand: List[int]) -> List[Tuple[Tuple[Tuple[int, str, int], ...], Tuple]]:
+        """Генерирует действия для улицы 1 (возвращает хешируемые кортежи)."""
         board = self.boards[player_idx]; slots = board.get_available_slots();
         if len(slots) < 5: return []
         actions = []; MAX_ACTIONS = 500; count = 0
         for slot_combo in combinations(slots, 5):
              if count >= MAX_ACTIONS: break
-             # Используем одну перестановку карт для ускорения (можно вернуть permutations(hand))
-             card_perm = random.sample(hand, len(hand)) # Случайная перестановка
+             card_perm = random.sample(hand, len(hand))
              placement = [(card_perm[i], slot_combo[i][0], slot_combo[i][1]) for i in range(5)]
-             actions.append((placement, [])); count += 1
-             # for card_perm in permutations(hand): # Полный перебор (медленно)
-             #      placement = [(card_perm[i], slot_combo[i][0], slot_combo[i][1]) for i in range(5)]
-             #      actions.append((placement, [])); count += 1
-             #      if count >= MAX_ACTIONS: break
+             # --- ИСПРАВЛЕНО: Конвертируем placement в tuple и добавляем пустой tuple для сброса ---
+             actions.append((tuple(placement), tuple())); count += 1
         return actions
 
+
     def _get_legal_actions_pineapple(self, player_idx: int, hand: List[int]) -> List[Tuple[Tuple[int, str, int], Tuple[int, str, int], int]]:
-        """Генерирует действия для улиц 2-5."""
-        # (Логика без изменений)
+        """Генерирует действия для улиц 2-5 (уже возвращает хешируемый кортеж)."""
+        # (Логика без изменений, т.к. кортежи уже хешируемы)
         board = self.boards[player_idx]; slots = board.get_available_slots();
         if len(slots) < 2: return []
         actions = []
@@ -349,6 +294,7 @@ class GameState:
                 actions.append(((c1, r1, i1), (c2, r2, i2), discard))
                 actions.append(((c2, r1, i1), (c1, r2, i2), discard))
         return actions
+
 
     def get_state_representation(self) -> tuple:
         """Возвращает неизменяемое представление состояния для MCTS."""
@@ -369,16 +315,13 @@ class GameState:
         if not isinstance(other, GameState): return NotImplemented
         return self.get_state_representation() == other.get_state_representation()
 
+    # (Методы to_dict и from_dict без изменений)
     def to_dict(self) -> Dict[str, Any]:
-        """Преобразует состояние в словарь для JSON-сериализации."""
-        # (Логика без изменений)
         boards = [{'rows': {r: [card_to_str(c) for c in b.rows[r]] for r in b.ROW_NAMES}, '_cards_placed': b._cards_placed, 'is_foul': b.is_foul, '_is_complete': b._is_complete} for b in self.boards]
         return {"boards": boards, "private_discard": [[card_to_str(c) for c in p] for p in self.private_discard], "dealer_idx": self.dealer_idx, "_internal_current_player_idx": self._internal_current_player_idx, "street": self.street, "current_hands": {i: [card_to_str(c) for c in h] if h else None for i, h in self.current_hands.items()}, "fantasyland_status": self.fantasyland_status, "next_fantasyland_status": self.next_fantasyland_status, "fantasyland_cards_to_deal": self.fantasyland_cards_to_deal, "is_fantasyland_round": self.is_fantasyland_round, "fantasyland_hands": [[card_to_str(c) for c in h] if h else None for h in self.fantasyland_hands], "_player_acted_this_street": self._player_acted_this_street, "_player_finished_round": self._player_finished_round, "_last_player_acted": self._last_player_acted}
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'GameState':
-        """Восстанавливает состояние из словаря."""
-        # (Логика без изменений)
         num_p = len(data.get("boards", [])); num_p = cls.NUM_PLAYERS if num_p == 0 else num_p; boards = []; known_cards: Set[int] = set()
         for b_data in data.get("boards", [{} for _ in range(num_p)]):
             b = PlayerBoard(); rows_raw = b_data.get('rows', {}); cards_count = 0
