@@ -4,9 +4,10 @@ Unit-тесты для модуля src.scoring.
 """
 
 import pytest
-
-# Импорты из src пакета
-from src.card import card_from_str, Card as CardUtils, INVALID_CARD
+from src.card import (
+    Card as CardUtils, card_to_str, RANK_MAP, STR_RANKS, # <--- Добавлен RANK_MAP
+    INVALID_CARD, INT_RANK_TO_CHAR
+)
 from src.scoring import (
     get_hand_rank_safe, get_row_royalty, check_board_foul,
     get_fantasyland_entry_cards, check_fantasyland_stay,
