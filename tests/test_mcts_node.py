@@ -21,9 +21,11 @@ def create_simple_state(street=1, dealer=0, p0_hand_str=None, p1_hand_str=None):
     state = GameState(dealer_idx=dealer)
     state.street = street
     if p0_hand_str:
-        state.current_hands[0] = hand_to_int(p0_hand_str)
+        # Используем статический метод класса Card
+        state.current_hands[0] = Card.hand_to_int(p0_hand_str)
     if p1_hand_str:
-        state.current_hands[1] = hand_to_int(p1_hand_str)
+        # Используем статический метод класса Card
+        state.current_hands[1] = Card.hand_to_int(p1_hand_str)
     state._internal_current_player_idx = (dealer + 1) % 2
     state._player_finished_round = [False, False]
     return state
