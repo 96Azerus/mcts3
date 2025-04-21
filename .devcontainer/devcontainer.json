@@ -4,6 +4,13 @@
 	// Используем базовый образ Python 3.11 от Microsoft
 	"image": "mcr.microsoft.com/devcontainers/python:0-3.11",
 
+	// --- ДОБАВЛЕНА СЕКЦИЯ features ---
+	"features": {
+		// Включаем Docker-in-Docker для возможности сборки и запуска Docker внутри Codespace
+		"ghcr.io/devcontainers/features/docker-in-docker:2": {}
+	},
+	// --- КОНЕЦ СЕКЦИИ features ---
+
 	// Устанавливаем рабочую директорию внутри контейнера
 	"workspaceFolder": "/app",
 	"workspaceMount": "source=${localWorkspaceFolder},target=/app,type=bind",
@@ -49,15 +56,15 @@
 			"settings": {
 				// Настройки Python
 				"python.testing.pytestArgs": [
-					"tests"
+					"tests", "-v" // Добавляем -v для подробного вывода pytest
 				],
 				"python.testing.unittestEnabled": false,
 				"python.testing.pytestEnabled": true,
 				// Форматирование и линтинг
 				"editor.formatOnSave": true,
-				"python.formatting.provider": "black", // Используем black по умолчанию
-				"python.linting.flake8Enabled": true,
-				"python.linting.pylintEnabled": false, // Отключаем pylint в пользу flake8/ruff
+				"python.formatting.provider": "none", // Используем Ruff для форматирования
+				"python.linting.flake8Enabled": true, // Можно оставить или отключить в пользу Ruff
+				"python.linting.pylintEnabled": false,
 				"python.linting.enabled": true,
 				// Настройки Ruff
 				"[python]": {
