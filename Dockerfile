@@ -1,4 +1,4 @@
-# Dockerfile
+# Dockerfile v1.1
 # Используем официальный образ Python
 FROM python:3.11
 
@@ -32,15 +32,14 @@ USER appuser
 
 # Указываем Flask, где искать приложение (app.py в корне /app)
 ENV FLASK_APP=app.py
-# Указываем порт по умолчанию (Render и другие PaaS его переопределят)
-ENV PORT=8080
-# Устанавливаем режим работы Gunicorn (production рекомендуется)
-ENV APP_ENV=production
-# Переменная для количества воркеров Gunicorn (можно переопределить при запуске)
-ENV WEB_CONCURRENCY=2
+# Указываем порт по умолчанию (будет переопределен через env var PORT)
+# ENV PORT=8080
+# Устанавливаем режим работы Gunicorn (production рекомендуется, но для Codespace можно development)
+# ENV APP_ENV=production
 
 # Команда для запуска приложения с использованием Gunicorn
 # Gunicorn будет запускаться от имени appuser
 # Используем exec для того, чтобы Gunicorn стал PID 1 в контейнере
-# Используем переменную окружения WEB_CONCURRENCY или значение по умолчанию
-CMD exec gunicorn --bind 0.0.0.0:$PORT --workers ${WEB_CONCURRENCY} --log-level info app:app
+# Используем переменные окружения PORT и WEB_CONCURRENCY
+# Добавляем --timeout для долгих MCTS ходов
+CMD exec gunicorn --bind 0.0.0.0:${PORT:-10000} --workers ${WEB_CONCURRENCY} --timeout 120 --log-level info app:app
