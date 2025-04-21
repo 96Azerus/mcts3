@@ -1,67 +1,92 @@
 // .devcontainer/devcontainer.json
 {
-	"name": "OFC Pineapple Poker AI (Python 3.11)",
+	"name": "OFC Pineapple MCTS",
+	// Используем базовый образ Python 3.11 от Microsoft
+	"image": "mcr.microsoft.com/devcontainers/python:0-3.11",
 
-	// Используем существующий Dockerfile для сборки контейнера
-	"build": {
-		"dockerfile": "../Dockerfile", // Путь к Dockerfile относительно директории .devcontainer
-		"context": ".." // Контекст сборки - корневая директория проекта
-	},
+	// Устанавливаем рабочую директорию внутри контейнера
+	"workspaceFolder": "/app",
+	"workspaceMount": "source=${localWorkspaceFolder},target=/app,type=bind",
 
-	// Переменные окружения для контейнера (можно добавить еще)
+	// Запускаем команды после создания контейнера
+	"postCreateCommand": "pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -r requirements.txt",
+
+	// Переменные окружения для контейнера
 	"containerEnv": {
-		"PYTHONPATH": "/app", // Указываем Python, где искать модули (включая src)
-		"FLASK_ENV": "development", // Устанавливаем режим разработки по умолчанию
-		"FLASK_DEBUG": "1"
-		// "MCTS_TIME_LIMIT_MS": "3000" // Пример переопределения параметра MCTS
+		"PYTHONPATH": "/app",
+		"FLASK_APP": "app.py",
+		"FLASK_ENV": "development", // Для разработки в Codespace
+		"FLASK_DEBUG": "1",         // Включаем режим отладки Flask
+		"LOG_LEVEL": "DEBUG",       // Более подробное логирование для отладки
+		"PORT": "10000",            // Порт для Gunicorn/Flask
+		"MCTS_NUM_WORKERS": "4",    // Количество воркеров для MCTS
+		"MCTS_ROLLOUTS_PER_LEAF": "2", // Роллаутов на лист MCTS
+		"WEB_CONCURRENCY": "4"      // Количество воркеров Gunicorn
+		// "GUNICORN_CMD_ARGS": "--worker-class gevent" // Опционально для асинхронных воркеров
 	},
 
-	// Настройки VS Code внутри контейнера
+	// Перенаправляем порт 10000
+	"forwardPorts": [10000],
+	"portsAttributes": {
+		"10000": {
+			"label": "Flask App",
+			"onAutoForward": "openPreview" // Открывать превью при авто-перенаправлении
+		}
+	},
+
+	// Устанавливаем расширения VS Code
 	"customizations": {
 		"vscode": {
-			// Устанавливаемые расширения VS Code
 			"extensions": [
-				"ms-python.python", // Основное расширение Python
-				"ms-python.vscode-pylance", // Анализ языка (IntelliSense)
-				"ms-python.debugpy", // Отладчик Python
-				"njpwerner.autodocstring", // Генерация докстрингов
-				"ms-azuretools.vscode-docker", // Интеграция с Docker
-				"bierner.github-markdown-preview", // Улучшенный предпросмотр Markdown
-				"redhat.vscode-yaml", // Поддержка YAML (для Docker Compose и т.д.)
-				"charliermarsh.ruff" // Линтер Ruff
+				"ms-python.python",             // Python основной
+				"ms-python.vscode-pylance",     // IntelliSense
+				"ms-python.flake8",             // Flake8 линтер
+				"ms-python.mypy-type-checker",  // MyPy проверка типов
+				"charliermarsh.ruff",           // Ruff быстрый линтер/форматтер
+				"njpwerner.autodocstring",      // Генератор докстрингов
+				"donjayamanne.githistory"       // История Git
 			],
-			// Настройки редактора
 			"settings": {
-				"python.defaultInterpreterPath": "/usr/local/bin/python", // Путь к Python внутри контейнера
-				"python.linting.enabled": true,
-				"python.linting.pylintEnabled": false, // Отключаем Pylint в пользу Ruff/Flake8
-				"python.linting.flake8Enabled": true,
-				"python.formatting.provider": "black", // Используем Black для форматирования
-				"editor.formatOnSave": true, // Форматировать при сохранении
-				"python.testing.pytestArgs": [ // Аргументы для Pytest
-					"tests", // Указываем директорию с тестами
-					"-v"     // Включаем подробный вывод
+				// Настройки Python
+				"python.testing.pytestArgs": [
+					"tests"
 				],
-				"python.testing.unittestEnabled": false, // Отключаем стандартный unittest
-				"python.testing.pytestEnabled": true, // Включаем Pytest
-				"files.eol": "\n", // Использовать LF в качестве символа конца строки
-				"terminal.integrated.defaultProfile.linux": "bash", // Терминал по умолчанию
-				"terminal.integrated.profiles.linux": {
-					"bash": {
-						"path": "/bin/bash"
+				"python.testing.unittestEnabled": false,
+				"python.testing.pytestEnabled": true,
+				// Форматирование и линтинг
+				"editor.formatOnSave": true,
+				"python.formatting.provider": "black", // Используем black по умолчанию
+				"python.linting.flake8Enabled": true,
+				"python.linting.pylintEnabled": false, // Отключаем pylint в пользу flake8/ruff
+				"python.linting.enabled": true,
+				// Настройки Ruff
+				"[python]": {
+					"editor.defaultFormatter": "charliermarsh.ruff",
+					"editor.codeActionsOnSave": {
+						"source.fixAll": "explicit",
+						"source.organizeImports": "explicit"
 					}
+				},
+				"ruff.lint.args": [],
+				// Настройки MyPy
+				"mypy-type-checker.args": ["--strict"],
+				// Прочие настройки
+				"files.exclude": {
+					"**/.git": true,
+					"**/.svn": true,
+					"**/.hg": true,
+					"**/CVS": true,
+					"**/.DS_Store": true,
+					"**/Thumbs.db": true,
+					"**/__pycache__": true,
+					"**/.pytest_cache": true,
+					"**/.mypy_cache": true,
+					"**/.ruff_cache": true
 				}
 			}
 		}
 	},
 
-	// Порты для проброса из контейнера на хост
-	"forwardPorts": [8080], // Пробрасываем порт, на котором работает Flask/Gunicorn
-
-	// Команда, выполняемая после создания контейнера
-	// "postCreateCommand": "pip install --upgrade pip && pip install -r requirements.txt", // Зависимости уже установлены в Dockerfile
-
-	// Пользователь, от имени которого будут запускаться процессы в контейнере
-	// Должен совпадать с USER в Dockerfile
-	"remoteUser": "appuser"
+	// Запускаем от имени пользователя vscode (создается автоматически)
+	"remoteUser": "vscode"
 }
